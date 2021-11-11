@@ -14,6 +14,12 @@ import { getTokenAUTH } from '@/utils/auth';
 //用于存放请求
 const pendingMap = new Map();
 
+// 用于存放loading
+const LoadingInstance = {
+  _target: null,
+  _count: 0
+};
+
 function serviceApi(axiosConfig, customOptions) {
   console.log('axiosConfig', axiosConfig)
   const service = axios.create({
@@ -35,6 +41,14 @@ function serviceApi(axiosConfig, customOptions) {
     console.log(`请求拦截---config `, config, addPending(axiosConfig));
     removePending(config);
     custom_options.repeat_request_cancel && addPending(config);
+    // 创建loading实例
+    if (custom_options.loading) {
+      LoadingInstance._count++;
+      if (LoadingInstance._count === 1) {
+        LoadingInstance._target = function () { };
+      }
+    }
+
 
 
     // 自动携带token
@@ -52,7 +66,16 @@ function serviceApi(axiosConfig, customOptions) {
 
   // 响应拦截
   service.interceptors.response.use(response => {
-    console.log(`响应拦截---response`, response)
+    removePending(response.config);
+    custom_options.loading && closeLoading(custom_options); // 关闭loading
+
+    // 显示请求错误信息
+    if (custom_options.code_message_show && response.data && response.data.code !== 0) {
+      console.log(`message`, response.data.message)
+      return Promise.reject(response.data); // code不等于0, 页面具体逻辑就不执行了
+    }
+
+    return custom_options.reduct_data_format ? response.data : response;
   }, error => {
     error.config && removePending(error.config);
     custom_options.error_message_show && httpErrorStatusHandle(error); // 处理错误状态码
@@ -64,18 +87,32 @@ function serviceApi(axiosConfig, customOptions) {
 export default serviceApi;
 
 /**
+ * 关闭Loading层实例
+ * @param {*} _options 
+ */
+function closeLoading(_options) {
+  if (_options.loading && LoadingInstance._count > 0) LoadingInstance._count--;
+  if (LoadingInstance._count === 0) {
+    LoadingInstance._target.close();
+    LoadingInstance._target = null;
+  }
+}
+
+
+
+/**
  * 处理异常
  * @param {*} error 
  */
- function httpErrorStatusHandle(error) {
+function httpErrorStatusHandle(error) {
   // 处理被取消的请求
-  if(axios.isCancel(error)) return console.error('请求的重复请求：' + error.message);
+  if (axios.isCancel(error)) return console.error('请求的重复请求：' + error.message);
   let message = '';
   if (error && error.response) {
-    switch(error.response.status) {
-      case 302: message = '接口重定向了！';break;
-      case 400: message = '参数不正确！';break;
-      case 401: message = '您未登录，或者登录已经超时，请先登录！';break;
+    switch (error.response.status) {
+      case 302: message = '接口重定向了！'; break;
+      case 400: message = '参数不正确！'; break;
+      case 401: message = '您未登录，或者登录已经超时，请先登录！'; break;
       case 403: message = '您没有权限操作！'; break;
       case 404: message = `请求地址出错: ${error.response.config.url}`; break; // 在正确域名下
       case 408: message = '请求超时！'; break;

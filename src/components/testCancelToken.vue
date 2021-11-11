@@ -11,7 +11,12 @@ export default {
   name: 'TestCancelToken',
   setup() {
     flopApi.rollCardActivity()
-    
+    setTimeout(() => {
+      flopApi.rollCardActivity()
+    }, 500)
+    setTimeout(() => {
+      flopApi.rollCardActivity()
+    }, 700)
   }
 }
 </script>
